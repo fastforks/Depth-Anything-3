@@ -1,3 +1,32 @@
+# Depth Anything 3: faster inference fork
+
+> **You are on `cuda-kernels`.** Research fork of [ByteDance-Seed/Depth-Anything-3](https://github.com/ByteDance-Seed/Depth-Anything-3) (base `3d835ec`; `main` mirrors upstream). Two branches:
+> - [`portable`](https://github.com/fastforks/Depth-Anything-3/tree/portable): plain PyTorch, no build step; `network_core` (backbone + head) exports to ONNX / TensorRT, pre- and sky postprocessing stay eager.
+> - [`cuda-kernels`](https://github.com/fastforks/Depth-Anything-3/tree/cuda-kernels): `portable` plus custom kernels (head_dim-64 flash attention, fp16-accumulate cuDNN head convolutions, an NHWC bilinear kernel; prebuilt for sm_80 to sm_120; the convolutions need `pip install nvidia-cudnn-frontend`). Every kernel falls back to plain PyTorch if it cannot load.
+> Licence, as upstream: code Apache-2.0 ([LICENSE](LICENSE)). Weights are not included and not re-hosted; each checkpoint keeps its Hugging Face licence (DA3MONO-LARGE, DA3METRIC-LARGE, DA3-BASE, DA3-SMALL: Apache-2.0; the -LARGE / -GIANT / NESTED main-series checkpoints: CC BY-NC 4.0, see the upstream table below). Only DA3MONO-LARGE was tested here.
+
+```python
+from depth_anything_3.fast import load_fast
+m = load_fast("path/to/DA3MONO-LARGE")        # kernels on by default (kernels=False or DA3_FAST_KERNELS=0: plain PyTorch)
+out = m.infer([img_u8_cuda], process_res=504)  # img_u8_cuda: [3, H, W] uint8 RGB on the GPU
+depth = out["depth"][0]                        # [h, w] fp32 at the processing resolution (as upstream prediction.depth[0])
+```
+Tests: `DA3_WEIGHTS=path/to/DA3MONO-LARGE pytest tests`. The `portable` API below (`utils/gpu_inference.py`) works here too.
+
+DA3MONO-LARGE, 1482x994 image, RTX 5060 Ti 16 GB, torch 2.14.1+cu130, 2026-10-12; cold process, median of 15 after warm-up; time includes preprocessing and the resize of the depth to the input size. Peak MB = torch allocated / reserved. NYU-20 = affine-aligned AbsRel on 20 NYUv2 images. First call / new size = total latency of the first call at 504 / of the first call at 1024 after 504.
+
+| version | 504 ms | 1024 ms | speed-up 504 / 1024 | peak MB at 504 | peak MB at 1024 | startup / first call / new size | weights MB | NYU-20 AbsRel |
+|---|---|---|---|---|---|---|---|---|
+| upstream (bf16 autocast, CPU preprocessing) | 92.5 | 213.8 | 1.00x | 2416 / 3412 | 2711 / 2794 | 4.6 s / 482 ms / 217 ms | 1275 | 0.03394 |
+| **portable** | 25.5 | 116.8 | 3.6x / 1.83x | 819 / 964 | 1246 / 1842 | 4.6 s / 470 ms / 134 ms | 637 | 0.03396 |
+| **cuda-kernels** | 16.1 | 72.3 | 5.7x / 2.96x | 791 / 988 | 1120 / 1418 | 3.2 s / 449 ms / 169 ms | 637 | 0.03397 |
+
+Upstream runs the backbone in bf16 autocast, the fork in fp16 (same tensor-core rate).
+
+`cuda-kernels` with the kernels off: 19.7 / 93.8 ms. Raw rows, commands and commits: the results directory `2026-10-12_da3_release` of the research workspace (not part of this repo).
+
+---
+
 <div align="center">
 <h1 style="border-bottom: none; margin-bottom: 0px ">Depth Anything 3: Recovering the Visual Space from Any Views</h1>
 <!-- <h2 style="border-top: none; margin-top: 3px;">Recovering the Visual Space from Any Views</h2> -->
