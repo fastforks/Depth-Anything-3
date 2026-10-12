@@ -230,8 +230,8 @@ class DPT(nn.Module):
         fused = self._fuse(resized_feats)
 
         # 3) Upsample to target resolution, optionally add position encoding again
-        h_out = int(ph * self.patch_size / self.down_ratio)
-        w_out = int(pw * self.patch_size / self.down_ratio)
+        h_out = ph * self.patch_size // self.down_ratio  # integer maths: stays symbolic under torch.export
+        w_out = pw * self.patch_size // self.down_ratio  # integer maths: stays symbolic under torch.export
 
         fused = self.scratch.output_conv1(fused)
         fused = custom_interpolate(fused, (h_out, w_out), mode="bilinear", align_corners=True)
