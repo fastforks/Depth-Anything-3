@@ -453,6 +453,8 @@ class FeatureFusionBlock(nn.Module):
         else:
             up_kwargs = {"size": size}
 
-        y = custom_interpolate(y, **up_kwargs, mode="bilinear", align_corners=self.align_corners)
+        # 1x1 out_conv before the bilinear upsample: they commute (per-pixel linear map vs. per-channel convex
+        # interpolation; exact up to rounding) and the conv runs on 4x fewer pixels
         y = self.out_conv(y)
+        y = custom_interpolate(y, **up_kwargs, mode="bilinear", align_corners=self.align_corners)
         return y
