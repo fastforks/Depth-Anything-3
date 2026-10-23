@@ -15,11 +15,14 @@ Also in this branch: DINOv2 position embedding as two bicubic matrices and the D
 
 DA3MONO-LARGE, 1482x994 image, RTX 5060 Ti 16 GB, torch 2.14.1+cu130, 2026-10-12; cold process, median of 15 after warm-up; time includes preprocessing and the resize of the depth to the input size. Peak MB = torch allocated / reserved. NYU-20 = affine-aligned AbsRel on 20 NYUv2 images. First call / new size = total latency of the first call at 504 / of the first call at 1024 after 504.
 
-| version | 504 ms | 1024 ms | speed-up 504 / 1024 | peak MB at 504 | peak MB at 1024 | startup / first call / new size | weights MB | NYU-20 AbsRel |
+| version | 504 ms | 1024 ms | speed-up 504 ; 1024 (vs flags / vs upstream) | peak MB at 504 | peak MB at 1024 | startup / first call / new size | weights MB | NYU-20 AbsRel |
 |---|---|---|---|---|---|---|---|---|
-| upstream (bf16 autocast, CPU preprocessing) | 92.5 | 213.8 | 1.00x | 2416 / 3412 | 2711 / 2794 | 4.6 s / 482 ms / 217 ms | 1275 | 0.03394 |
-| **portable** | 25.5 | 116.8 | 3.6x / 1.83x | 819 / 964 | 1246 / 1842 | 4.6 s / 470 ms / 134 ms | 637 | 0.03396 |
-| **cuda-kernels** | 16.1 | 72.3 | 5.7x / 2.96x | 791 / 988 | 1120 / 1418 | 3.2 s / 449 ms / 169 ms | 637 | 0.03397 |
+| upstream (bf16 autocast, CPU preprocessing) | 92.5 | 213.8 | 0.53x / 1.00x ; 0.82x / 1.00x | 2416 / 3412 | 2711 / 2794 | 4.6 s / 482 ms / 217 ms | 1275 | 0.03394 |
+| upstream + flags (`cudnn.benchmark`, TF32; upstream's bf16 autocast kept) | 49.1 | 175.4 | 1.00x / 1.88x ; 1.00x / 1.22x | 1571 / 1846 | 2392 / 3474 | 4.7 s / 1216 ms / 1407 ms | 1275 | 0.03394 |
+| **portable** | 25.5 | 116.8 | 1.93x / 3.6x ; 1.50x / 1.83x | 819 / 964 | 1246 / 1842 | 4.6 s / 470 ms / 134 ms | 637 | 0.03396 |
+| **cuda-kernels** | 16.1 | 72.3 | 3.05x / 5.7x ; 2.43x / 2.96x | 791 / 988 | 1120 / 1418 | 3.2 s / 449 ms / 169 ms | 637 | 0.03397 |
+
+Flags row: driver-side only, no source edit. `cudnn.benchmark` + TF32 on upstream's own bf16 autocast; start-up / first call / new size include the autotune, and the peak reserved its workspace. `model.half()` and channels_last were not measured (bf16 autocast and a ViT backbone, so no like-for-like fp16 path without code changes). Raw: `results/2026-10-23_flags_older_forks/` of the publishing workspace.
 
 Upstream runs the backbone in bf16 autocast, the fork in fp16 (same tensor-core rate).
 
